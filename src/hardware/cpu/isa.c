@@ -89,7 +89,7 @@ static uint64_t decode_operand(od_t *od)
     }
     else
     {
-        // access memory: return the physical address
+        // access memory: return the virtual address
         uint64_t vaddr = 0;
 
         if (od->type == MEM_IMM)
@@ -142,7 +142,7 @@ static const char *reg_name_list[72] = {
     "%rcx", "%ecx", "%cx", "%ch", "%cl",
     "%rdx", "%edx", "%dx", "%dh", "%dl",
     "%rsi", "%esi", "%si", "%sih", "%sil",
-    "%rdx", "%edi", "%di", "%dih", "%dil",
+    "%rdi", "%edi", "%di", "%dih", "%dil",
     "%rbp", "%ebp", "%bp", "%bph", "%bpl",
     "%rsp", "%esp", "%sp", "%sph", "%spl",
     "%r8", "%r8d", "%r8w", "%r8b", 
@@ -736,8 +736,16 @@ static void add_handler(od_t *src_od, od_t *dst_od, core_t *cr)
         // src: register (value: int64_t bit map)
         // dst: register (value: int64_t bit map)
         uint64_t val = *(uint64_t *)dst + *(uint64_t *)src;
+        int val_sign = ((val >> 63) & 0x1);
+        int src_sign = ((src >> 63) & 0x1);
+        int dst_sign = ((dst >> 63) & 0x1);
 
         // set condition flags
+        cr->flags.CF = (val < *((uint64_t *)src)); // unsigned
+        cr->flags.SF = ((val >> 63) & 0x1);
+        cr->flags.OF = (src_sign == 0 && dst_sign == 0 && val_sign == 1) || 
+                        (src_sign == 1 && dst_sign == 1 && val_sign == 0); // signed
+        cr->flags.ZF = (val == 0);
 
         // update registers
         *(uint64_t *)dst = val;
@@ -750,10 +758,67 @@ static void add_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 
 static void sub_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 {
+    uint64_t src = decode_operand(src_od);
+    uint64_t dst = decode_operand(dst_od);
+
+    if (src_od->type == IMM && dst_od->type == REG)
+    {
+        // src: register (value: int64_t bit map)
+        // dst: register (value: int64_t bit map)
+        // dst = dst - src = dst + (-src)
+        uint64_t neg_src = ~src + 1;
+        uint64_t val = *(uint64_t *)dst + neg_src;
+
+        int val_sign = ((val >> 63) & 0x1);
+        int src_sign = ((src >> 63) & 0x1);
+        int dst_sign = ((dst >> 63) & 0x1);
+
+        // set condition flags
+        cr->flags.CF = (val > src); // unsigned
+        cr->flags.SF = val_sign;
+        cr->flags.OF = (dst_sign == 0 && src_sign == 1 && val_sign == 1) ||
+                        (dst_sign == 1 && src_sign == 0 && val_sign == 0); // signed
+        cr->flags.ZF = (val == 0);
+        // update registers
+        *(uint64_t *)dst = val;
+        // signed and unsigned value follow the same addition. e.g.
+        // 5 = 0000000000000101, 3 = 0000000000000011, -3 = 1111111111111101, 5 + (-3) = 0000000000000010
+        next_rip(cr);
+        return;
+    }
 }
 
 static void cmp_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 {
+    uint64_t src = decode_operand(src_od);
+    uint64_t dst = decode_operand(dst_od);
+
+    if (src_od->type == IMM && dst_od->type >= MEM_IMM)  // cmpq imm，memory
+    {
+        // src: register (value: int64_t bit map)
+        // dst: register (value: int64_t bit map)
+        // dst = dst - src = dst + (-src)
+        uint64_t neg_src = ~src + 1;
+        uint64_t dst_val = read64bits_dram(va2pa(dst, cr), cr);
+        uint64_t val = dst_val + neg_src;
+
+        int val_sign = ((val >> 63) & 0x1);
+        int src_sign = ((src >> 63) & 0x1);
+        int dst_sign = ((dst_val >> 63) & 0x1);
+
+        // set condition flags
+        cr->flags.CF = (val > src); // unsigned
+        cr->flags.SF = val_sign;
+        cr->flags.OF = (dst_sign == 0 && src_sign == 1 && val_sign == 1) ||
+                        (dst_sign == 1 && src_sign == 0 && val_sign == 0); // signed
+        cr->flags.ZF = (val == 0);
+        // update registers
+        *(uint64_t *)dst = val;
+        // signed and unsigned value follow the same addition. e.g.
+        // 5 = 0000000000000101, 3 = 0000000000000011, -3 = 1111111111111101, 5 + (-3) = 0000000000000010
+        next_rip(cr);
+        return;
+    }
 }
 
 static void jne_handler(od_t *src_od, od_t *dst_od, core_t *cr)
@@ -769,7 +834,9 @@ static void jmp_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 void instruction_cycle(core_t *cr)
 {
     // FETCH: get the instruction string by program counter
-    const char *inst_str = (const char *)cr->rip;  // 虚拟地址解释为字符串指针
+   // const char *inst_str = (const char *)cr->rip;  // 虚拟地址解释为字符串指针
+    char inst_str[MAX_INSTRUCTION_CHAR + 10];
+    readinst_dram(va2pa(cr->rip, cr), inst_str, cr);
     debug_printf(DEBUG_INSTRUCTIONCYCLE, "%lx    %s\n", cr->rip, inst_str);
 
     // DECODE: decode the run-time instruction operands
