@@ -687,6 +687,19 @@ static void pop_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 
 static void leave_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 {
+    // mov %rbp, %rsp
+    (cr->reg).rsp = (cr->reg).rbp;
+    // popq %rbp
+    // rbp 恢复到调用前的rbp，即恢复到上一个栈帧
+    uint64_t old_val = read64bits_dram(
+            va2pa((cr->reg).rsp, cr),
+            cr
+            );
+    (cr->reg).rsp = (cr->reg).rsp + 8;
+    (cr->reg).rbp = old_val;
+    next_rip(cr);
+    reset_cflags(cr);
+    return;
 }
 
 static void call_handler(od_t *src_od, od_t *dst_od, core_t *cr)
@@ -774,7 +787,7 @@ static void sub_handler(od_t *src_od, od_t *dst_od, core_t *cr)
         int dst_sign = ((dst >> 63) & 0x1);
 
         // set condition flags
-        cr->flags.CF = (val > src); // unsigned
+        cr->flags.CF = (val > *(uint64_t *)dst); // unsigned
         cr->flags.SF = val_sign;
         cr->flags.OF = (dst_sign == 0 && src_sign == 1 && val_sign == 1) ||
                         (dst_sign == 1 && src_sign == 0 && val_sign == 0); // signed
@@ -791,7 +804,7 @@ static void sub_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 static void cmp_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 {
     uint64_t src = decode_operand(src_od);
-    uint64_t dst = decode_operand(dst_od);
+    uint64_t dst = decode_operand(dst_od);  // 虚拟地址
 
     if (src_od->type == IMM && dst_od->type >= MEM_IMM)  // cmpq imm，memory
     {
@@ -807,13 +820,12 @@ static void cmp_handler(od_t *src_od, od_t *dst_od, core_t *cr)
         int dst_sign = ((dst_val >> 63) & 0x1);
 
         // set condition flags
-        cr->flags.CF = (val > src); // unsigned
+        cr->flags.CF = (val > dst_val); // unsigned
         cr->flags.SF = val_sign;
         cr->flags.OF = (dst_sign == 0 && src_sign == 1 && val_sign == 1) ||
                         (dst_sign == 1 && src_sign == 0 && val_sign == 0); // signed
         cr->flags.ZF = (val == 0);
-        // update registers
-        *(uint64_t *)dst = val;
+
         // signed and unsigned value follow the same addition. e.g.
         // 5 = 0000000000000101, 3 = 0000000000000011, -3 = 1111111111111101, 5 + (-3) = 0000000000000010
         next_rip(cr);
@@ -821,12 +833,30 @@ static void cmp_handler(od_t *src_od, od_t *dst_od, core_t *cr)
     }
 }
 
+// jne: jump when not equal(zero)
 static void jne_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 {
+    uint64_t src = decode_operand(src_od);
+    // src_od is actually an instruction memory address
+    // but we are interpreting it as an immediate number
+    if (cr->flags.ZF == 0)
+    {
+        // last instruction value != 0
+        cr->rip = src;
+    }
+    else
+    {
+        // last instruction value == 0
+        next_rip(cr);
+    }
+    cr->flags.__cpu_flag_values = 0; // 标志位重置
 }
 
 static void jmp_handler(od_t *src_od, od_t *dst_od, core_t *cr)
 {
+    uint64_t src = decode_operand(src_od);
+    cr->rip = src;
+    cr->flags.__cpu_flag_values = 0;
 }
 
 // instruction cycle is implemented in CPU
