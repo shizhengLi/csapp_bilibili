@@ -19,6 +19,7 @@ void TestParseOperand();
 
 int main()
 {   
+    TestAddFunctionCallAndComputation();
     TestSumRecursiveCondition();
     return 0;
 }
@@ -90,11 +91,17 @@ static void TestAddFunctionCallAndComputation()
         "retq",                     // 10
         "mov    %rdx,%rsi",         // 11
         "mov    %rax,%rdi",         // 12
-        "callq  0",                 // 13
+        "callq  0x00400000",        // 13
         "mov    %rax,-0x8(%rbp)",   // 14
     };
-    ac->rip = (uint64_t)&assembly[11];
-    sprintf(assembly[13], "callq  $%p", &assembly[0]);
+
+    // copy to physical memory
+    for (int i = 0; i < 15; ++ i)
+    {
+        writeinst_dram(va2pa(i * 0x40 + 0x00400000, ac), assembly[i], ac);
+        // 0x40 是一条指令的大小
+    }
+    ac->rip = MAX_INSTRUCTION_CHAR * sizeof(char) * 11 + 0x00400000;
     
     printf("begin\n");
     int time = 0;
