@@ -3,4 +3,5 @@ exe_hardware
 *.a
 *.o
 *~
+/test
 /.vscode
