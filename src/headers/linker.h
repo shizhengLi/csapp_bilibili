@@ -49,8 +49,16 @@ typedef struct
 typedef struct
 {
     char buffer[MAX_ELF_FILE_LENGTH][MAX_ELF_FILE_WIDTH];
-    uint64_t line_count;
+    uint64_t line_count; // count of effective lines
+    
+    uint64_t sht_count;  // count of section header table lines
     sh_entry_t *sht;
+
+    uint64_t symt_count; // count of symbol table lines
+    st_entry_t *symt;
+
 } elf_t;
 
+void parse_elf(char *filename, elf_t *elf);
+void free_elf(elf_t *elf);
 #endif
