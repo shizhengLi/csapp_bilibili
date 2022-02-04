@@ -253,11 +253,11 @@ void parse_elf(char *filename, elf_t *elf)
     }
 
     // parse section header
-    int sh_count = string2uint(elf->buffer[1]);  // index = 1的行就是section header table的行数
-    elf->sht = malloc(sh_count * sizeof(sh_entry_t)); // 为每个SHT行（表项）分配内存
+    elf->sht_count = string2uint(elf->buffer[1]);  // index = 1的行就是section header table的行数
+    elf->sht = malloc(elf->sht_count * sizeof(sh_entry_t)); // 为每个SHT行（表项）分配内存
 
     sh_entry_t *symt_sh = NULL;  // .symtab在section header table中的表项
-    for (int i = 0; i < sh_count; i ++)
+    for (int i = 0; i < elf->sht_count; i ++)
     {
         parse_sh(elf->buffer[2 + i], &(elf->sht[i])); 
         print_sh_entry(&(elf->sht[i]));

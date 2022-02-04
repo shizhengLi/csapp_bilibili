@@ -18,10 +18,11 @@ int main()
     elf_t *srcp[2];
     srcp[0] = &src[0];
     srcp[1] = &src[1];
-
     link_elf((elf_t **)&srcp, 2, &dst);
+
     free_elf(&src[0]);
     free_elf(&src[1]);
+    free_elf(&dst);
 
     return 0;
 }

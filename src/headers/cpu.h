@@ -254,7 +254,6 @@ core_t cores[NUM_CORES];
 // active core for current task
 uint64_t ACTIVE_CORE;
 
-#define MAX_INSTRUCTION_CHAR 64
 #define NUM_INSTRTYPE 14
 
 // CPU's instruction cycle: execution of instructions
