@@ -3,5 +3,5 @@
 *.o
 *~
 /test
-/bin
+#/bin
 /.vscode

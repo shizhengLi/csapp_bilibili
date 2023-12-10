@@ -1,5 +1,5 @@
-CC = /usr/bin/gcc-9
-CFLAGS = -Wall -g -O2 -Werror -std=gnu99 -Wno-unused-function
+CC = /usr/bin/gcc-11
+CFLAGS = -Wall -g -O2 -Werror -std=gnu99 -Wno-unused-function -fcommon
 
 BIN_HARDWARE = ./bin/test_hardware
 
